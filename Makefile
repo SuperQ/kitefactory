@@ -56,9 +56,13 @@ clean-pkgs:
 clean-isos:
 	rm -f vendor/images/*
 
-build/${OS}-${VER}-${ARCH}/${OS}-${VER}-${ARCH}.qcow2: src/packer/${OS}-${VER}-${ARCH}.json secrets/${OS}-${VER}-${ARCH}/http/installerconfig vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso vendor/packages/${OS}-${VER}-${ARCH}
+build/freebsd-${VER}-${ARCH}/${OS}-${VER}-${ARCH}.qcow2: src/packer/${OS}-${VER}-${ARCH}.json secrets/${OS}-${VER}-${ARCH}/http/installerconfig vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso vendor/packages/${OS}-${VER}-${ARCH}
 	PACKER_LOG=1 PACKER_KEY_INTERVAL=10ms packer build -on-error=ask -only=qemu -var-file=src/packer/${OS}-${VER}-${ARCH}.json src/packer/${OS}.json
 
+build/debian-${VER}-${ARCH}/${OS}-${VER}-${ARCH}.qcow2: src/packer/${OS}-${VER}-${ARCH}.json vendor/images/${OS}-${VER}-${ARCH}/${OS}-${VER}-${ARCH}-netinst.iso vendor/packages/${OS}-${VER}-${ARCH}
+	PACKER_LOG=1 PACKER_KEY_INTERVAL=10ms packer build -on-error=ask -only=qemu -var-file=src/packer/${OS}-${VER}-${ARCH}.json src/packer/${OS}.json
+
+# Supporting intermediate files
 secrets/${OS}-${VER}-${ARCH}:
 	mkdir -p $@
 
@@ -67,6 +71,10 @@ secrets/${OS}-${VER}-${ARCH}/http: secrets/${OS}-${VER}-${ARCH}
 
 secrets/${OS}-${VER}-${ARCH}/env: secrets/${OS}-${VER}-${ARCH}
 
+vendor/images/${OS}-${VER}-${ARCH}:
+	mkdir -p $@
+
+# FreeBSD ISOs and other bits
 secrets/${OS}-${VER}-${ARCH}/http/installerconfig: secrets/${OS}-${VER}-${ARCH}/env src/packer/http/${OS}-${VER}-${ARCH}/installerconfig.tpl secrets/${OS}-${VER}-${ARCH}/http
 	test -n "${PROVISIONING_PASSWORD}"
 	sed "s/PROVISIONING_PASSWORD/${PROVISIONING_PASSWORD}/" src/packer/http/${OS}-${VER}-${ARCH}/installerconfig.tpl > secrets/${OS}-${VER}-${ARCH}/http/installerconfig
@@ -80,9 +88,6 @@ vendor/packages/${OS}-${VER}-${ARCH}: Makefile
 		[ -f "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" ] || curl -o "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" "http://pkg.${OS}.org/${ISO_OS}:11:${ARCH}/quarterly/All/$$pkg"; \
 		xz -t "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg"; \
 	done
-
-vendor/images/${OS}-${VER}-${ARCH}:
-	mkdir -p $@
 
 vendor/images/${OS}-${VER}-${ARCH}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH}: vendor/images/${OS}-${VER}-${ARCH}
 	curl -o vendor/images/${OS}-${VER}-${ARCH}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH} -OJL "https://download.${OS}.org/ftp/releases/${ARCH}/${ARCH}/ISO-IMAGES/${VER}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH}"
@@ -99,4 +104,15 @@ vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso.xz
 	( \
 		cd vendor/images/${OS}-${VER}-${ARCH}; \
 		grep "${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso.xz)" CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH} | sha256sum -c - ; \
+	)
+
+# Debian ISOs and other bits
+vendor/images/${OS}-${VER}-${ARCH}/SHA256SUMS: vendor/images/${OS}-${VER}-${ARCH}
+	curl -o "$@" "https://cdimage.debian.org/debian-cd/current/ppc64el/iso-cd/SHA256SUMS"
+
+vendor/images/${OS}-${VER}-${ARCH}/${OS}-${VER}-${ARCH}-netinst.iso: vendor/images/${OS}-${VER}-${ARCH} vendor/images/${OS}-${VER}-${ARCH}/SHA256SUMS
+	curl -o "$@" -OJL "https://cdimage.debian.org/debian-cd/current/ppc64el/iso-cd/${OS}-${VER}-${ARCH}-netinst.iso"
+	( \
+		cd vendor/images/${OS}-${VER}-${ARCH}; \
+		grep "${OS}-${VER}-${ARCH}-netinst.iso" SHA256SUMS | sha256sum -c - ; \
 	)
