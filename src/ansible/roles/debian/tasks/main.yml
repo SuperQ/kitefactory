@@ -1,0 +1,28 @@
+---
+
+- name: Update to latest patch level
+  shell: apt-get update && apt-get dist-upgrade
+
+- name: Install required packages
+  shell: apt-get install go git bash curl tmux sudo
+
+- name: Set hostname 1/2 - hostname
+  shell: "hostname {{ lookup('env','PACKER_TEMPLATE') | regex_replace('[^a-zA-Z0-9-]', '-') }}.build.prometheus.io"
+
+- lineinfile:
+    dest: /etc/hostname
+    create: yes
+    owner: root
+    group: wheel
+    mode: 664
+    regexp: '.*'
+    line: "{{ lookup('env','PACKER_TEMPLATE') | regex_replace('[^a-zA-Z0-9-]', '-') }}.build.prometheus.io"
+
+# configure sudo
+- name: Configure sudo
+  copy:
+    src: sudoers.d/default
+    dest: "{{ sudoersd_path }}"
+    owner: root
+    group: wheel
+    mode: 644

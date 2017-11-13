@@ -1,0 +1,5 @@
+- hosts: default
+  roles:
+    - debian
+    - common
+    - buildkite
