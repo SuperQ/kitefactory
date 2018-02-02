@@ -1,6 +1,8 @@
 .POSIX:
 .SUFFIXES:
 
+OPENBSD_MIRROR=openbsd.mirror.constant.com/pub/OpenBSD/
+
 .PHONY: freebsd-11.1-amd64
 freebsd-11.1-amd64:
 	$(MAKE) \
@@ -26,6 +28,16 @@ freebsd-11.0-amd64:
 		ISO_OS=FreeBSD VER=11.0 \
 		ARCH=amd64 \
 		PKGS="gettext-runtime-0.19.8.1_1.txz indexinfo-0.2.6.txz libffi-3.2.1.txz readline-6.3.8.txz python27-2.7.13_3.txz" \
+		image
+
+.PHONY: openbsd-6.1-amd64
+openbsd-6.1-amd64:
+	$(MAKE) \
+		OS=openbsd \
+		ISO_OS=OpenBSD \
+		ISO_VER=61 \
+		VER=6.1 \
+		ARCH=amd64 \
 		image
 
 .PHONY: image
@@ -56,9 +68,14 @@ clean-pkgs:
 clean-isos:
 	rm -f vendor/images/*
 
-build/${OS}-${VER}-${ARCH}/${OS}-${VER}-${ARCH}.qcow2: src/packer/${OS}-${VER}-${ARCH}.json secrets/${OS}-${VER}-${ARCH}/http/installerconfig vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso vendor/packages/${OS}-${VER}-${ARCH}
+# Build Disk Images
+build/freebsd-${VER}-${ARCH}/${OS}-${VER}-${ARCH}.qcow2: src/packer/${OS}-${VER}-${ARCH}.json src/packer/${OS}.json secrets/${OS}-${VER}-${ARCH}/http/installerconfig vendor/images/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso vendor/packages/${OS}-${VER}-${ARCH}
 	PACKER_LOG=1 PACKER_KEY_INTERVAL=10ms packer build -on-error=ask -only=qemu -var-file=src/packer/${OS}-${VER}-${ARCH}.json src/packer/${OS}.json
 
+build/openbsd-${VER}-${ARCH}/${OS}-${VER}-${ARCH}.qcow2: src/packer/${OS}-${VER}-${ARCH}.json src/packer/${OS}.json vendor/images/${OS}-${VER}-${ARCH}/install${ISO_VER}.iso vendor/packages/${OS}-${VER}-${ARCH}
+	PACKER_LOG=1 PACKER_KEY_INTERVAL=10ms packer build -on-error=ask -only=qemu -var-file=src/packer/${OS}-${VER}-${ARCH}.json src/packer/${OS}.json
+
+# Supporting intermediate files
 secrets/${OS}-${VER}-${ARCH}:
 	mkdir -p $@
 
@@ -71,21 +88,21 @@ secrets/${OS}-${VER}-${ARCH}/http/installerconfig: secrets/${OS}-${VER}-${ARCH}/
 	test -n "${PROVISIONING_PASSWORD}"
 	sed "s/PROVISIONING_PASSWORD/${PROVISIONING_PASSWORD}/" src/packer/http/${OS}-${VER}-${ARCH}/installerconfig.tpl > secrets/${OS}-${VER}-${ARCH}/http/installerconfig
 
-vendor/packages/${OS}-${VER}-${ARCH}: Makefile
+# Advance package downloads
+vendor/packages/freebsd-${VER}-${ARCH}: Makefile
 	mkdir -p vendor/packages/${OS}-${VER}-${ARCH}
 	for pkg in pkg.txz pkg.txz.sig; do \
-		[ -f "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" ] || curl -o "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" "http://pkg.${OS}.org/${ISO_OS}:11:${ARCH}/quarterly/Latest/$$pkg"; \
+		[ -f "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" ] || curl -o "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" "http://pkg.freebsd.org/${ISO_OS}:11:${ARCH}/quarterly/Latest/$$pkg"; \
 	done
 	for pkg in ${PKGS}; do \
-		[ -f "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" ] || curl -o "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" "http://pkg.${OS}.org/${ISO_OS}:11:${ARCH}/quarterly/All/$$pkg"; \
+		[ -f "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" ] || curl -o "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg" "http://pkg.freebsd.org/${ISO_OS}:11:${ARCH}/quarterly/All/$$pkg"; \
 		xz -t "vendor/packages/${OS}-${VER}-${ARCH}/$$pkg"; \
 	done
 
-vendor/images/${OS}-${VER}-${ARCH}:
-	mkdir -p $@
-
-vendor/images/${OS}-${VER}-${ARCH}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH}: vendor/images/${OS}-${VER}-${ARCH}
-	curl -o vendor/images/${OS}-${VER}-${ARCH}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH} -OJL "https://download.${OS}.org/ftp/releases/${ARCH}/${ARCH}/ISO-IMAGES/${VER}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH}"
+# ISOs
+## FreeBSD
+vendor/images/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH}:
+	curl -o vendor/images/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH} -OJL "https://download.${OS}.org/ftp/releases/${ARCH}/${ARCH}/ISO-IMAGES/${VER}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH}"
 
 vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso: vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso.xz vendor/images/${OS}-${VER}-${ARCH}/CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH}
 	xz -d --stdout vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso.xz > vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso
@@ -100,3 +117,18 @@ vendor/images/${OS}-${VER}-${ARCH}/${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso.xz
 		cd vendor/images/${OS}-${VER}-${ARCH}; \
 		grep "${ISO_OS}-${VER}-RELEASE-${ARCH}-disc1.iso.xz)" CHECKSUM.SHA256-${ISO_OS}-${VER}-RELEASE-${ARCH} | sha256sum -c - ; \
 	)
+
+## OpenBSD
+vendor/images/${OS}-${VER}-${ARCH}:
+	mkdir -p $@
+
+vendor/images/${OS}-${VER}-${ARCH}/SHA256: vendor/images/${OS}-${VER}-${ARCH}
+	curl -o vendor/images/${OS}-${VER}-${ARCH}/SHA256 https://${OPENBSD_MIRROR}/${VER}/${ARCH}/SHA256
+
+vendor/images/${OS}-${VER}-${ARCH}/install${ISO_VER}.iso: vendor/images/${OS}-${VER}-${ARCH}/SHA256
+	curl -o vendor/images/${OS}-${VER}-${ARCH}/install${ISO_VER}.iso https://${OPENBSD_MIRROR}/${VER}/${ARCH}/install${ISO_VER}.iso
+	( \
+		cd vendor/images/${OS}-${VER}-${ARCH}; \
+		grep "install61.iso)" SHA256 | sha256sum -c - ; \
+	)
+
